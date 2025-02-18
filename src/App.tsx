@@ -14,7 +14,7 @@ import {
   LanguageDetectorPrediction,
 } from "@mediapipe/tasks-text";
 
-// Define AI API types
+
 interface AITranslatorCapabilities {
   languagePairAvailable: (
     source: string,
@@ -58,7 +58,7 @@ interface AINamespace {
   summarizer: AISummarizer;
 }
 
-// Extend Window interface
+
 declare global {
   interface Window {
     ai: AINamespace;
@@ -101,7 +101,7 @@ const App = () => {
     { code: "tr", name: "Turkish" },
   ];
 
-  // Initialize the language detector
+  
   useEffect(() => {
     const initializeDetector = async () => {
       try {
@@ -165,7 +165,7 @@ const App = () => {
     setInputText("");
     detectLanguage(inputText);
 
-    // Focus back on input after sending
+    
     setTimeout(() => {
       inputRef.current?.focus();
     }, 0);
@@ -338,7 +338,7 @@ const App = () => {
     }
   };
 
-  // Function to convert language code to human-readable name
+  
   const languageTagToHumanReadable = (
     languageTag: string,
     targetLanguage = "en"
@@ -361,21 +361,18 @@ const App = () => {
         backgroundImage: "url('/wall.jpg')",
         backgroundSize: "cover",
         backgroundRepeat: "no-repeat",
-        backgroundColor: "rgba(255, 255, 255, 0.85)", // white with 85% opacity
+        backgroundColor: "rgba(255, 255, 255, 0.85)",
         backgroundBlendMode: "overlay",
       }}
     >
-      {/* Sticky Header */}
       <header className="sticky top-0 z-10 bg-white shadow-md">
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-between h-16">
-            {/* Logo and App Name */}
             <div className="flex items-center">
               <span className="text-blue-600 text-xl font-bold">Budi</span>
               <span className="text-cyan-600 text-xs">By TonyDim</span>
             </div>
 
-            {/* Desktop Navigation */}
             <nav className="hidden md:flex space-x-6">
               <a
                 href="#"
@@ -409,7 +406,6 @@ const App = () => {
               </a>
             </nav>
 
-            {/* Mobile Menu Button */}
             <div className="md:hidden">
               <button
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -421,7 +417,6 @@ const App = () => {
             </div>
           </div>
 
-          {/* Mobile Navigation */}
           {mobileMenuOpen && (
             <div className="md:hidden py-3 border-t border-gray-200">
               <div className="flex flex-col space-y-3">
@@ -461,12 +456,10 @@ const App = () => {
         </div>
       </header>
 
-      {/* Output area: Messages and actions */}
       <div className="flex-grow overflow-auto p-4">
         <div className="space-y-4">
           {messages.map((message) => (
             <div key={message.id} className="mb-4">
-              {/* Message content */}
               <div
                 className={`p-3 rounded-lg ${
                   message.isUser
@@ -476,21 +469,19 @@ const App = () => {
               >
                 <p>{message.text}</p>
 
-                {/* Show detected languages if available */}
                 {!message.isUser &&
                   message.languages &&
                   message.languages.length > 0 && (
                     <div className="mt-2 text-sm text-gray-600">
-                      Detected:{" "}
+                      Budi is{" "}
+                      {(message.languages[0].probability * 100).toFixed(1)}% sure that the language is{" "}
                       {languageTagToHumanReadable(
                         message.languages[0].languageCode
                       )}
-                      ({(message.languages[0].probability * 100).toFixed(1)}%)
                     </div>
                   )}
               </div>
 
-              {/* Action buttons and results (only for bot/output messages) */}
               {!message.isUser && (
                 <div className="mt-2">
                   <div className="flex items-center mt-2 space-x-2">
@@ -531,7 +522,6 @@ const App = () => {
                     </div>
                   </div>
 
-                  {/* Display download progress */}
                   {downloadProgress && (
                     <div className="mt-2">
                       <div className="text-sm text-gray-600 mb-1">
@@ -557,14 +547,12 @@ const App = () => {
                     </div>
                   )}
 
-                  {/* Display translation result */}
                   {message.translation && (
                     <div className="mt-2 p-2 bg-gray-100 rounded">
                       {message.translation}
                     </div>
                   )}
 
-                  {/* Display summary result */}
                   {message.summary && (
                     <div className="mt-2 p-2 bg-gray-100 rounded">
                       {message.summary}
@@ -586,7 +574,6 @@ const App = () => {
         </div>
       </div>
 
-      {/* Input area: Textarea and send button */}
       <div className="p-4 border-t border-gray-200 bg-white">
         <div className="flex items-center">
           <textarea
