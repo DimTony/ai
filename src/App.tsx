@@ -1,9 +1,19 @@
 import React, { useState, useEffect, useRef } from "react";
-import { FiSend, FiRefreshCw } from "react-icons/fi";
+import {
+  FiSend,
+  FiRefreshCw,
+  FiMenu,
+  FiUser,
+  FiSettings,
+  FiInfo,
+  FiHelpCircle,
+  FiGlobe,
+} from "react-icons/fi";
 import {
   LanguageDetector,
   LanguageDetectorPrediction,
 } from "@mediapipe/tasks-text";
+
 
 // Define AI API types
 interface AITranslatorCapabilities {
@@ -79,6 +89,7 @@ const App = () => {
     loaded: number;
     total: number;
   } | null>(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -346,6 +357,101 @@ const App = () => {
 
   return (
     <div className="flex flex-col h-screen bg-gray-100">
+      {/* Sticky Header */}
+      <header className="sticky top-0 z-10 bg-white shadow-md">
+        <div className="container mx-auto px-4">
+          <div className="flex items-center justify-between h-16">
+            {/* Logo and App Name */}
+            <div className="flex items-center">
+              <span className="text-blue-600 text-xl font-bold">Budi</span>
+            </div>
+
+            {/* Desktop Navigation */}
+            <nav className="hidden md:flex space-x-6">
+              <a
+                href="#"
+                className="flex items-center text-gray-700 hover:text-blue-600"
+              >
+                <FiGlobe className="mr-1" /> Language
+              </a>
+              <a
+                href="#"
+                className="flex items-center text-gray-700 hover:text-blue-600"
+              >
+                <FiInfo className="mr-1" /> Summarize
+              </a>
+              <a
+                href="#"
+                className="flex items-center text-gray-700 hover:text-blue-600"
+              >
+                <FiHelpCircle className="mr-1" /> Help
+              </a>
+              <a
+                href="#"
+                className="flex items-center text-gray-700 hover:text-blue-600"
+              >
+                <FiSettings className="mr-1" /> Settings
+              </a>
+              <a
+                href="#"
+                className="flex items-center text-gray-700 hover:text-blue-600"
+              >
+                <FiUser className="mr-1" /> Account
+              </a>
+            </nav>
+
+            {/* Mobile Menu Button */}
+            <div className="md:hidden">
+              <button
+                onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                className="text-gray-700 hover:text-blue-600 focus:outline-none"
+                aria-label="Toggle mobile menu"
+              >
+                <FiMenu size={24} />
+              </button>
+            </div>
+          </div>
+
+          {/* Mobile Navigation */}
+          {mobileMenuOpen && (
+            <div className="md:hidden py-3 border-t border-gray-200">
+              <div className="flex flex-col space-y-3">
+                <a
+                  href="#"
+                  className="flex items-center py-2 text-gray-700 hover:text-blue-600"
+                >
+                  <FiGlobe className="mr-2" /> Language
+                </a>
+                <a
+                  href="#"
+                  className="flex items-center py-2 text-gray-700 hover:text-blue-600"
+                >
+                  <FiInfo className="mr-2" /> Summarize
+                </a>
+                <a
+                  href="#"
+                  className="flex items-center py-2 text-gray-700 hover:text-blue-600"
+                >
+                  <FiHelpCircle className="mr-2" /> Help
+                </a>
+                <a
+                  href="#"
+                  className="flex items-center py-2 text-gray-700 hover:text-blue-600"
+                >
+                  <FiSettings className="mr-2" /> Settings
+                </a>
+                <a
+                  href="#"
+                  className="flex items-center py-2 text-gray-700 hover:text-blue-600"
+                >
+                  <FiUser className="mr-2" /> Account
+                </a>
+              </div>
+            </div>
+          )}
+        </div>
+      </header>
+
       {/* Output area: Messages and actions */}
       <div className="flex-grow overflow-auto p-4">
         <div className="space-y-4">
