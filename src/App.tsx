@@ -1,217 +1,125 @@
-import {
-  LanguageDetector,
-  LanguageDetectorPrediction,
-} from "@mediapipe/tasks-text";
 import React, { useState, useEffect } from "react";
+
+interface Translator {
+  translate: (text: string) => Promise<string>;
+}
+
+interface DownloadProgressEvent extends Event {
+  loaded: number;
+  total: number;
+}
 
 const App = () => {
   const [inputText, setInputText] = useState("");
-  const [result, setResult] = useState<LanguageDetectorPrediction[]>([]);
-  const [detector, setDetector] = useState<LanguageDetector | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
   const [translatedText, setTranslatedText] = useState("");
-  const [targetLanguage, setTargetLanguage] = useState("es");
-  const [isTranslating, setIsTranslating] = useState(false);
-
-  const defaultText =
-    "日本語は、日本国内や、かつての日本領だった国、そして国外移民や移住者を含む日本人同士の間で使用されている言語。日本は法令によって公用語を規定していないが、法令その他の公用文は全て日本語で記述され、各種法令において日本語を用いることが規定され、学校教育においては「国語」の教科として学習を行うなど、事実上日本国内において唯一の公用語となっている。";
+  const [sourceLanguage, setSourceLanguage] = useState("es");
+  const [targetLanguage, setTargetLanguage] = useState("fr");
+  const [translator, setTranslator] = useState<Translator | null>(null);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState<{
+    loaded: number;
+    total: number;
+  } | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const supportedLanguages = [
     { code: "en", name: "English" },
     { code: "es", name: "Spanish" },
-    { code: "ja", name: "Japanese" },
     { code: "fr", name: "French" },
-    { code: "de", name: "German" },
-    { code: "it", name: "Italian" },
-    { code: "ko", name: "Korean" },
-    { code: "zh", name: "Chinese (Simplified)" },
+    { code: "ja", name: "Japanese" },
   ];
 
-  // Function to convert language code to human-readable name
-  const languageTagToHumanReadable = (
-    languageTag: string,
-    targetLanguage = "en"
-  ) => {
+  const initializeTranslator = async () => {
+    setError(null);
+    setIsDownloading(true);
+    setDownloadProgress(null);
+
     try {
-      const displayNames = new Intl.DisplayNames([targetLanguage], {
-        type: "language",
+      const newTranslator = await (window as any).ai.translator.create({
+        sourceLanguage,
+        targetLanguage,
+        monitor(m: any) {
+          m.addEventListener("downloadprogress", (e: DownloadProgressEvent) => {
+            setDownloadProgress({
+              loaded: e.loaded,
+              total: e.total,
+            });
+          });
+        },
       });
-      return displayNames.of(languageTag);
-    } catch (error) {
-      console.error("Error converting language tag:", error);
-      return languageTag;
+
+      setTranslator(newTranslator);
+      setError(null);
+    } catch (err) {
+      setError("Failed to initialize translator. Please try again.");
+      console.error("Translation initialization error:", err);
+    } finally {
+      setIsDownloading(false);
     }
   };
 
-  // Initialize the language detector
   useEffect(() => {
-    const initializeDetector = async () => {
+    // Check if selected language pair requires downloading
+    const checkCapabilities = async () => {
       try {
-        const { LanguageDetector, FilesetResolver } = await import(
-          "@mediapipe/tasks-text"
+        const translatorCapabilities = await (
+          window as any
+        ).ai.translator.capabilities();
+        const status = await translatorCapabilities.languagePairAvailable(
+          sourceLanguage,
+          targetLanguage
         );
 
-        const text = await FilesetResolver.forTextTasks(
-          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-text@0.10.0/wasm"
-        );
-
-        const languageDetector = await LanguageDetector.createFromOptions(
-          text,
-          {
-            baseOptions: {
-              modelAssetPath: `https://storage.googleapis.com/mediapipe-models/language_detector/language_detector/float32/1/language_detector.tflite`,
-            },
-            maxResults: 5,
-          }
-        );
-
-        setDetector(languageDetector);
-      } catch (error) {
-        console.error("Error initializing language detector:", error);
+        if (status === "after-download") {
+          initializeTranslator();
+        }
+      } catch (err) {
+        setError("Failed to check translation capabilities.");
+        console.error("Capabilities check error:", err);
       }
     };
 
-    initializeDetector();
-  }, []);
-
-  const handlePopulateText = () => {
-    setInputText(defaultText);
-    setTranslatedText("");
-  };
-
-  const sleep = (ms: number) =>
-    new Promise((resolve) => setTimeout(resolve, ms));
-
-  const handleDetectLanguage = async () => {
-    if (!inputText) {
-      alert("Please write some text, or click 'Populate text' to add text");
-      return;
-    }
-
-    if (!detector) {
-      alert(
-        "Language detector is still initializing. Please try again in a moment."
-      );
-      return;
-    }
-
-    setIsLoading(true);
-    setResult([]);
-
-    try {
-      await sleep(5);
-      const detectionResult = await detector.detect(inputText);
-      setResult(detectionResult.languages);
-    } catch (error) {
-      console.error("Error detecting language:", error);
-      setResult([]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+    checkCapabilities();
+  }, [sourceLanguage, targetLanguage]);
 
   const handleTranslate = async () => {
-    if (!inputText) {
-      alert("Please enter text to translate");
+    if (!inputText.trim()) {
+      setError("Please enter text to translate");
       return;
     }
 
-    setIsTranslating(true);
-    setTranslatedText("");
-
-    try {
-      // You'll need to replace this URL with your actual Google Cloud Translation API endpoint
-      // and include your API key
-      const response = await fetch(
-        `https://translation.googleapis.com/language/translate/v2?key=YOUR_API_KEY`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            q: inputText,
-            target: targetLanguage,
-            format: "text",
-          }),
-        }
-      );
-
-      const data = await response.json();
-
-      if (data.data && data.data.translations) {
-        setTranslatedText(data.data.translations[0].translatedText);
-      } else {
-        throw new Error("Translation failed");
-      }
-    } catch (error) {
-      console.error("Translation error:", error);
-      setTranslatedText("Error: Could not translate text");
-    } finally {
-      setIsTranslating(false);
+    if (!translator) {
+      setError("Translator is not ready. Please wait for initialization.");
+      return;
     }
+
+    setError(null);
+    try {
+      const result = await translator.translate(inputText.trim());
+      setTranslatedText(result);
+    } catch (err) {
+      setError("Translation failed. Please try again.");
+      console.error("Translation error:", err);
+    }
+  };
+
+  const formatBytes = (bytes: number) => {
+    const mb = bytes / (1024 * 1024);
+    return `${mb.toFixed(1)} MB`;
   };
 
   return (
     <div className="max-w-2xl mx-auto p-6">
-      <h1 className="text-2xl font-bold mb-4">
-        Language Detection and Translation
-      </h1>
-
-      <p className="mb-4">
-        This demo detects and translates text using{" "}
-        <a
-          href="https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes"
-          className="text-blue-600 hover:text-blue-800 underline"
-        >
-          ISO_639-1
-        </a>{" "}
-        language codes.
-      </p>
-
-      <h2 className="text-xl font-bold mb-2">How to use</h2>
-      <p className="mb-4">
-        Add text to the input field, then press <b>Detect Language</b> or{" "}
-        <b>Translate</b>.
-      </p>
-
-      <p className="mb-4">
-        You can{" "}
-        <button
-          onClick={handlePopulateText}
-          className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
-        >
-          POPULATE TEXT
-        </button>{" "}
-        with a default input, or add your own text.
-      </p>
-
-      <p className="font-bold mb-2">Input:</p>
-      <div className="mb-4">
-        <textarea
-          value={inputText}
-          onChange={(e) => setInputText(e.target.value)}
-          className="w-full h-32 p-3 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          rows={8}
-          cols={40}
-          aria-label="Text Input"
-        />
-      </div>
+      <h1 className="text-2xl font-bold mb-4">AI Browser Translation</h1>
 
       <div className="flex gap-4 mb-6">
-        <button
-          onClick={handleDetectLanguage}
-          disabled={!detector || isLoading}
-          className="bg-blue-500 text-white px-6 py-2 rounded hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 disabled:bg-blue-300 disabled:cursor-not-allowed"
-        >
-          {isLoading ? "DETECTING..." : "DETECT LANGUAGE"}
-        </button>
-
-        <div className="flex items-center gap-2">
+        <div className="flex-1">
+          <label className="block text-sm font-medium mb-2">From:</label>
           <select
-            value={targetLanguage}
-            onChange={(e) => setTargetLanguage(e.target.value)}
-            className="p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+            value={sourceLanguage}
+            onChange={(e) => setSourceLanguage(e.target.value)}
+            className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+            disabled={isDownloading}
           >
             {supportedLanguages.map((lang) => (
               <option key={lang.code} value={lang.code}>
@@ -219,59 +127,72 @@ const App = () => {
               </option>
             ))}
           </select>
+        </div>
 
-          <button
-            onClick={handleTranslate}
-            disabled={isTranslating || !inputText}
-            className="bg-green-500 text-white px-6 py-2 rounded hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 disabled:bg-green-300 disabled:cursor-not-allowed"
+        <div className="flex-1">
+          <label className="block text-sm font-medium mb-2">To:</label>
+          <select
+            value={targetLanguage}
+            onChange={(e) => setTargetLanguage(e.target.value)}
+            className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+            disabled={isDownloading}
           >
-            {isTranslating ? "TRANSLATING..." : "TRANSLATE"}
-          </button>
+            {supportedLanguages.map((lang) => (
+              <option key={lang.code} value={lang.code}>
+                {lang.name}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
-      <div className="space-y-6">
-        {/* Detection Results */}
-        <div>
-          <p className="font-bold mb-2">Detection Result:</p>
-          <div className="min-h-6">
-            {isLoading && <p>Detecting language...</p>}
-            {!isLoading && result.length > 0 && (
-              <div className="space-y-2">
-                {result.map((language, index) => (
-                  <div key={index} className="bg-gray-100 p-3 rounded">
-                    <div className="font-medium">
-                      {languageTagToHumanReadable(language.languageCode)}
-                    </div>
-                    <div className="text-sm text-gray-600">
-                      Confidence: {(language.probability * 100).toFixed(1)}%
-                      <span className="ml-2 text-gray-400">
-                        (Code: {language.languageCode})
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-            {!isLoading && result.length === 0 && inputText && (
-              <p>Result is empty</p>
-            )}
+      {isDownloading && downloadProgress && (
+        <div className="mb-4">
+          <div className="text-sm text-gray-600 mb-2">
+            Downloading language model: {formatBytes(downloadProgress.loaded)} /{" "}
+            {formatBytes(downloadProgress.total)}
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-2.5">
+            <div
+              className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
+              style={{
+                width: `${
+                  (downloadProgress.loaded / downloadProgress.total) * 100
+                }%`,
+              }}
+            ></div>
           </div>
         </div>
+      )}
 
-        {/* Translation Results */}
-        <div>
-          <p className="font-bold mb-2">Translation:</p>
-          <div className="min-h-6">
-            {isTranslating && <p>Translating...</p>}
-            {!isTranslating && translatedText && (
-              <div className="bg-gray-100 p-3 rounded">
-                <p>{translatedText}</p>
-              </div>
-            )}
-          </div>
-        </div>
+      <div className="mb-4">
+        <textarea
+          value={inputText}
+          onChange={(e) => setInputText(e.target.value)}
+          placeholder="Enter text to translate"
+          className="w-full h-32 p-3 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+          disabled={isDownloading}
+        />
       </div>
+
+      <button
+        onClick={handleTranslate}
+        disabled={isDownloading || !translator || !inputText.trim()}
+        className="w-full bg-blue-500 text-white px-6 py-2 rounded hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 disabled:bg-gray-300 disabled:cursor-not-allowed mb-4"
+      >
+        {isDownloading ? "Downloading Language Model..." : "Translate"}
+      </button>
+
+      {error && (
+        <div className="mb-4 p-3 bg-red-100 text-red-700 rounded">{error}</div>
+      )}
+
+      {translatedText && (
+        <div className="mt-6">
+          <h2 className="text-lg font-bold mb-2">Translation:</h2>
+          <div className="p-3 bg-gray-100 rounded">{translatedText}</div>
+        </div>
+      )}
     </div>
   );
 };
