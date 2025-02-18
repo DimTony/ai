@@ -57,12 +57,10 @@ const App = () => {
   const supportedLanguages = [
     { code: "en", name: "English" },
     { code: "es", name: "Spanish" },
-    { code: "ja", name: "Japanese" },
     { code: "fr", name: "French" },
-    { code: "de", name: "German" },
-    { code: "it", name: "Italian" },
-    { code: "ko", name: "Korean" },
-    { code: "zh", name: "Chinese (Simplified)" },
+    { code: "pt", name: "Portuguese" },
+    { code: "ru", name: "Russian" },
+    { code: "tr", name: "Turkish" },
   ];
 
   // Function to convert language code to human-readable name
@@ -165,13 +163,16 @@ const App = () => {
         sourceLanguage,
         targetLanguage
       );
+      console.log("op", status);
 
       if (status === "after-download") {
+        console.log("here", sourceLanguage, targetLanguage);
         const newTranslator = await window.ai.translator.create({
           sourceLanguage,
           targetLanguage,
           monitor(m: any) {
             m.addEventListener("downloadprogress", (e: any) => {
+              console.log(`Downloaded ${e.loaded} of ${e.total} bytes`);
               setDownloadProgress({
                 loaded: e.loaded,
                 total: e.total,
@@ -187,6 +188,14 @@ const App = () => {
         setTranslatedText(
           `Translation from ${sourceLanguage} to ${targetLanguage} is not supported.`
         );
+      } else {
+        const translator = await window.ai.translator.create({
+          sourceLanguage,
+          targetLanguage,
+        });
+
+        const translatedText = await translator.translate(inputText);
+        setTranslatedText(translatedText);
       }
     } catch (error) {
       console.error("Translation error:", error);
