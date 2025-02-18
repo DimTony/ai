@@ -224,7 +224,7 @@ const App = () => {
       sharedContext: "This is a scientific article",
       type: "key-points",
       format: "markdown",
-      lenght: "medium",
+      length: "medium",
     };
 
     try {
@@ -241,10 +241,20 @@ const App = () => {
         summarizer = await window.ai.summarizer.create(options);
         console.log(summarizer);
       } else {
-        summarizer = await window.ai.summarizer.create(options);
-        summarizer.addEventListener("downloadprogress", (e: any) => {
-          console.log(e.loaded, e.total);
+        console.log('summarizer', status);
+        summarizer = await window.ai.summarizer.create({
+          ...options,
+          monitor(m: any) {
+            m.addEventListener("downloadprogress", (e: any) => {
+              console.log(`Downloaded ${e.loaded} of ${e.total} bytes`);
+              setDownloadProgress({
+                loaded: e.loaded,
+                total: e.total,
+              });
+            });
+          },
         });
+        console.log(summarizer);
       }
 
       const summary = await summarizer.summarize(inputText, {
