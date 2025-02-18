@@ -4,6 +4,36 @@ import {
 } from "@mediapipe/tasks-text";
 import React, { useState, useEffect } from "react";
 
+// Define types for the AI Translation API
+interface AITranslatorCapabilities {
+  languagePairAvailable: (
+    source: string,
+    target: string
+  ) => Promise<"after-download" | "ready" | "unsupported">;
+}
+
+interface AITranslator {
+  capabilities: () => Promise<AITranslatorCapabilities>;
+  create: (options: {
+    sourceLanguage: string;
+    targetLanguage: string;
+    monitor?: (m: any) => void;
+  }) => Promise<{
+    translate: (text: string) => Promise<string>;
+  }>;
+}
+
+interface AINamespace {
+  translator: AITranslator;
+}
+
+// Extend Window interface
+declare global {
+  interface Window {
+    ai: AINamespace;
+  }
+}
+
 const App = () => {
   const [inputText, setInputText] = useState("");
   const [result, setResult] = useState<LanguageDetectorPrediction[]>([]);
@@ -12,6 +42,14 @@ const App = () => {
   const [translatedText, setTranslatedText] = useState("");
   const [targetLanguage, setTargetLanguage] = useState("es");
   const [isTranslating, setIsTranslating] = useState(false);
+  const [translator, setTranslator] = useState<{
+    translate: (text: string) => Promise<string>;
+  } | null>(null);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState<{
+    loaded: number;
+    total: number;
+  } | null>(null);
 
   const defaultText =
     "日本語は、日本国内や、かつての日本領だった国、そして国外移民や移住者を含む日本人同士の間で使用されている言語。日本は法令によって公用語を規定していないが、法令その他の公用文は全て日本語で記述され、各種法令において日本語を用いることが規定され、学校教育においては「国語」の教科として学習を行うなど、事実上日本国内において唯一の公用語となっている。";
@@ -111,53 +149,58 @@ const App = () => {
   };
 
   const handleTranslate = async () => {
-    if (!inputText) {
-      alert("Please enter text to translate");
+    if (!inputText || !result.length) {
+      alert("Please detect the language first");
       return;
     }
 
     setIsTranslating(true);
     setTranslatedText("");
+    const sourceLanguage = result[0].languageCode;
 
     try {
-      // You'll need to replace this URL with your actual Google Cloud Translation API endpoint
-      // and include your API key
-      // const response = await fetch(
-      //   `https://translation.googleapis.com/language/translate/v2?key=YOUR_API_KEY`,
-      //   {
-      //     method: "POST",
-      //     headers: {
-      //       "Content-Type": "application/json",
-      //     },
-      //     body: JSON.stringify({
-      //       q: inputText,
-      //       target: targetLanguage,
-      //       format: "text",
-      //     }),
-      //   }
-      // );
+      setIsDownloading(true);
+      const translatorCapabilities = await window.ai.translator.capabilities();
+      const status = await translatorCapabilities.languagePairAvailable(
+        sourceLanguage,
+        targetLanguage
+      );
 
-      // const data = await response.json();
+      if (status === "after-download") {
+        const newTranslator = await window.ai.translator.create({
+          sourceLanguage,
+          targetLanguage,
+          monitor(m: any) {
+            m.addEventListener("downloadprogress", (e: any) => {
+              setDownloadProgress({
+                loaded: e.loaded,
+                total: e.total,
+              });
+            });
+          },
+        });
 
-      // if (data.data && data.data.translations) {
-      //   setTranslatedText(data.data.translations[0].translatedText);
-      // } else {
-      //   throw new Error("Translation failed");
-      // }
-      const translatorCapabilities = await self.ai.translator.capabilities();
-      translatorCapabilities.languagePairAvailable("es", "fr");
-
-      console.log("ll", translatorCapabilities);
+        setTranslator(newTranslator);
+        const translated = await newTranslator.translate(inputText);
+        setTranslatedText(translated);
+      } else if (status === "unsupported") {
+        setTranslatedText(
+          `Translation from ${sourceLanguage} to ${targetLanguage} is not supported.`
+        );
+      }
     } catch (error) {
       console.error("Translation error:", error);
       setTranslatedText("Error: Could not translate text");
     } finally {
       setIsTranslating(false);
+      setIsDownloading(false);
+      setDownloadProgress(null);
     }
   };
 
   return (
     <div className="max-w-2xl mx-auto p-6">
+      {/* ... rest of your JSX remains the same ... */}
       <h1 className="text-2xl font-bold mb-4">
         Language Detection and Translation
       </h1>
@@ -226,13 +269,35 @@ const App = () => {
 
           <button
             onClick={handleTranslate}
-            disabled={isTranslating || !inputText}
+            disabled={isTranslating || !result.length}
             className="bg-green-500 text-white px-6 py-2 rounded hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 disabled:bg-green-300 disabled:cursor-not-allowed"
           >
             {isTranslating ? "TRANSLATING..." : "TRANSLATE"}
           </button>
         </div>
       </div>
+
+      {isDownloading && downloadProgress && (
+        <div className="mb-4">
+          <div className="text-sm text-gray-600 mb-2">
+            Downloading language model:{" "}
+            {((downloadProgress.loaded / downloadProgress.total) * 100).toFixed(
+              1
+            )}
+            %
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-2.5">
+            <div
+              className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
+              style={{
+                width: `${
+                  (downloadProgress.loaded / downloadProgress.total) * 100
+                }%`,
+              }}
+            ></div>
+          </div>
+        </div>
+      )}
 
       <div className="space-y-6">
         {/* Detection Results */}
