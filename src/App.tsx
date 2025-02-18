@@ -14,7 +14,6 @@ import {
   LanguageDetectorPrediction,
 } from "@mediapipe/tasks-text";
 
-
 // Define AI API types
 interface AITranslatorCapabilities {
   languagePairAvailable: (
@@ -356,7 +355,14 @@ const App = () => {
   };
 
   return (
-    <div className="flex flex-col h-screen bg-gray-100">
+    <div
+      className="flex flex-col h-screen bg-gray-100"
+      style={{
+        backgroundImage: "url('/wall.jpg')",
+        backgroundSize: "cover",
+        backgroundRepeat: "no-repeat",
+      }}
+    >
       {/* Sticky Header */}
       <header className="sticky top-0 z-10 bg-white shadow-md">
         <div className="container mx-auto px-4">
@@ -364,7 +370,7 @@ const App = () => {
             {/* Logo and App Name */}
             <div className="flex items-center">
               <span className="text-blue-600 text-xl font-bold">Budi</span>
-              <span className="text-cyan-600 text-xs" >By TonyDim</span>
+              <span className="text-cyan-600 text-xs">By TonyDim</span>
             </div>
 
             {/* Desktop Navigation */}
