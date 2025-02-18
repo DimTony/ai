@@ -474,10 +474,13 @@ const App = () => {
                   message.languages.length > 0 && (
                     <div className="mt-2 text-sm text-gray-600">
                       Budi is{" "}
-                      {(message.languages[0].probability * 100).toFixed(1)}% sure that the language is{" "}
-                      {languageTagToHumanReadable(
-                        message.languages[0].languageCode
-                      )}
+                      {(message.languages[0].probability * 100).toFixed(1)}%
+                      sure that the language is{" "}
+                      <span className="text-blue-600 font-bold">
+                        {languageTagToHumanReadable(
+                          message.languages[0].languageCode
+                        )}
+                      </span>
                     </div>
                   )}
               </div>
