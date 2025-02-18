@@ -122,28 +122,32 @@ const App = () => {
     try {
       // You'll need to replace this URL with your actual Google Cloud Translation API endpoint
       // and include your API key
-      const response = await fetch(
-        `https://translation.googleapis.com/language/translate/v2?key=YOUR_API_KEY`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            q: inputText,
-            target: targetLanguage,
-            format: "text",
-          }),
-        }
-      );
+      // const response = await fetch(
+      //   `https://translation.googleapis.com/language/translate/v2?key=YOUR_API_KEY`,
+      //   {
+      //     method: "POST",
+      //     headers: {
+      //       "Content-Type": "application/json",
+      //     },
+      //     body: JSON.stringify({
+      //       q: inputText,
+      //       target: targetLanguage,
+      //       format: "text",
+      //     }),
+      //   }
+      // );
 
-      const data = await response.json();
+      // const data = await response.json();
 
-      if (data.data && data.data.translations) {
-        setTranslatedText(data.data.translations[0].translatedText);
-      } else {
-        throw new Error("Translation failed");
-      }
+      // if (data.data && data.data.translations) {
+      //   setTranslatedText(data.data.translations[0].translatedText);
+      // } else {
+      //   throw new Error("Translation failed");
+      // }
+      const translatorCapabilities = await self.ai.translator.capabilities();
+      translatorCapabilities.languagePairAvailable("es", "fr");
+
+      console.log("ll", translatorCapabilities);
     } catch (error) {
       console.error("Translation error:", error);
       setTranslatedText("Error: Could not translate text");
