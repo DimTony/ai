@@ -24,7 +24,8 @@ interface AITranslator {
 }
 
 interface AINamespace {
-  translator: AITranslator;
+  translator: any;
+  summarizer: any;
 }
 
 // Extend Window interface
@@ -40,8 +41,11 @@ const App = () => {
   const [detector, setDetector] = useState<LanguageDetector | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [translatedText, setTranslatedText] = useState("");
+  const [summarizedText, setSummarizedText] = useState("");
   const [targetLanguage, setTargetLanguage] = useState("es");
   const [isTranslating, setIsTranslating] = useState(false);
+  const [isSummarizing, setIsSummarizing] = useState(false);
+
   const [translator, setTranslator] = useState<{
     translate: (text: string) => Promise<string>;
   } | null>(null);
@@ -207,6 +211,57 @@ const App = () => {
     }
   };
 
+  const handleSummarize = async () => {
+    if (!inputText) {
+      alert("Please input text first");
+      return;
+    }
+
+    setIsSummarizing(true);
+    setSummarizedText("");
+
+    const options = {
+      sharedContext: "This is a scientific article",
+      type: "key-points",
+      format: "markdown",
+      lenght: "medium",
+    };
+
+    try {
+      setIsDownloading(true);
+      const summarizerCapabilities = await window.ai.summarizer.capabilities();
+      const status = await summarizerCapabilities.available;
+
+      let summarizer;
+      if (status === "no") {
+        setSummarizedText("The Summarizer API isn't usable");
+      } else if (status === "readily") {
+        console.log("sum", status);
+
+        summarizer = await window.ai.summarizer.create(options);
+        console.log(summarizer);
+      } else {
+        summarizer = await window.ai.summarizer.create(options);
+        summarizer.addEventListener("downloadprogress", (e: any) => {
+          console.log(e.loaded, e.total);
+        });
+      }
+
+      const summary = await summarizer.summarize(inputText, {
+        context: "This article is intended for a tech-savvy audience.",
+      });
+
+      setSummarizedText(summary);
+    } catch (error) {
+      console.error("Summarization error:", error);
+      setSummarizedText("Error: Could not summarize text");
+    } finally {
+      setIsSummarizing(false);
+      setIsDownloading(false);
+      setDownloadProgress(null);
+    }
+  };
+
   return (
     <div className="max-w-2xl mx-auto p-6">
       {/* ... rest of your JSX remains the same ... */}
@@ -283,6 +338,14 @@ const App = () => {
           >
             {isTranslating ? "TRANSLATING..." : "TRANSLATE"}
           </button>
+
+          <button
+            onClick={handleSummarize}
+            disabled={isSummarizing}
+            className="bg-cyan-500 text-white px-6 py-2 rounded hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 disabled:bg-green-300 disabled:cursor-not-allowed"
+          >
+            {isSummarizing ? "SUMMARIZING..." : "SUMMARIZE"}
+          </button>
         </div>
       </div>
 
@@ -345,6 +408,18 @@ const App = () => {
             {!isTranslating && translatedText && (
               <div className="bg-gray-100 p-3 rounded">
                 <p>{translatedText}</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div>
+          <p className="font-bold mb-2">Summary:</p>
+          <div className="min-h-6">
+            {isSummarizing && <p>Summarizing...</p>}
+            {!isSummarizing && summarizedText && (
+              <div className="bg-gray-100 p-3 rounded">
+                <p>{summarizedText}</p>
               </div>
             )}
           </div>
