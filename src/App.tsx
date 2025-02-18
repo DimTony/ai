@@ -364,6 +364,7 @@ const App = () => {
             {/* Logo and App Name */}
             <div className="flex items-center">
               <span className="text-blue-600 text-xl font-bold">Budi</span>
+              <span className="text-cyan-600 text-sm" >By TonyDim</span>
             </div>
 
             {/* Desktop Navigation */}
