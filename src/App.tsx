@@ -1,10 +1,11 @@
+import React, { useState, useEffect, useRef } from "react";
+import { FiSend, FiRefreshCw } from "react-icons/fi";
 import {
   LanguageDetector,
   LanguageDetectorPrediction,
 } from "@mediapipe/tasks-text";
-import React, { useState, useEffect } from "react";
 
-// Define types for the AI Translation API
+// Define AI API types
 interface AITranslatorCapabilities {
   languagePairAvailable: (
     source: string,
@@ -23,9 +24,29 @@ interface AITranslator {
   }>;
 }
 
+interface AISummarizerCapabilities {
+  available: "no" | "readily" | "after-download";
+}
+
+interface AISummarizer {
+  capabilities: () => Promise<AISummarizerCapabilities>;
+  create: (options: {
+    sharedContext?: string;
+    type?: string;
+    format?: string;
+    length?: string;
+    monitor?: (m: any) => void;
+  }) => Promise<{
+    summarize: (
+      text: string,
+      options?: { context?: string }
+    ) => Promise<string>;
+  }>;
+}
+
 interface AINamespace {
-  translator: any;
-  summarizer: any;
+  translator: AITranslator;
+  summarizer: AISummarizer;
 }
 
 // Extend Window interface
@@ -35,28 +56,31 @@ declare global {
   }
 }
 
+interface Message {
+  id: string;
+  text: string;
+  isUser: boolean;
+  timestamp: Date;
+  translation?: string;
+  summary?: string;
+  detectedLanguage?: string;
+  languages?: LanguageDetectorPrediction[];
+}
+
 const App = () => {
+  const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState("");
-  const [result, setResult] = useState<LanguageDetectorPrediction[]>([]);
-  const [detector, setDetector] = useState<LanguageDetector | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [translatedText, setTranslatedText] = useState("");
-  const [summarizedText, setSummarizedText] = useState("");
-  const [targetLanguage, setTargetLanguage] = useState("es");
+  const [selectedLanguage, setSelectedLanguage] = useState("en");
   const [isTranslating, setIsTranslating] = useState(false);
   const [isSummarizing, setIsSummarizing] = useState(false);
-
-  const [translator, setTranslator] = useState<{
-    translate: (text: string) => Promise<string>;
-  } | null>(null);
-  const [isDownloading, setIsDownloading] = useState(false);
+  const [detector, setDetector] = useState<LanguageDetector | null>(null);
   const [downloadProgress, setDownloadProgress] = useState<{
     loaded: number;
     total: number;
   } | null>(null);
-
-  const defaultText =
-    "日本語は、日本国内や、かつての日本領だった国、そして国外移民や移住者を含む日本人同士の間で使用されている言語。日本は法令によって公用語を規定していないが、法令その他の公用文は全て日本語で記述され、各種法令において日本語を用いることが規定され、学校教育においては「国語」の教科として学習を行うなど、事実上日本国内において唯一の公用語となっている。";
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const supportedLanguages = [
     { code: "en", name: "English" },
@@ -66,22 +90,6 @@ const App = () => {
     { code: "ru", name: "Russian" },
     { code: "tr", name: "Turkish" },
   ];
-
-  // Function to convert language code to human-readable name
-  const languageTagToHumanReadable = (
-    languageTag: string,
-    targetLanguage = "en"
-  ) => {
-    try {
-      const displayNames = new Intl.DisplayNames([targetLanguage], {
-        type: "language",
-      });
-      return displayNames.of(languageTag);
-    } catch (error) {
-      console.error("Error converting language tag:", error);
-      return languageTag;
-    }
-  };
 
   // Initialize the language detector
   useEffect(() => {
@@ -114,69 +122,106 @@ const App = () => {
     initializeDetector();
   }, []);
 
-  const handlePopulateText = () => {
-    setInputText(defaultText);
-    setTranslatedText("");
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-  const sleep = (ms: number) =>
-    new Promise((resolve) => setTimeout(resolve, ms));
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setInputText(e.target.value);
+  };
 
-  const handleDetectLanguage = async () => {
-    if (!inputText) {
-      alert("Please write some text, or click 'Populate text' to add text");
-      return;
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
     }
+  };
 
-    if (!detector) {
-      alert(
-        "Language detector is still initializing. Please try again in a moment."
-      );
-      return;
-    }
+  const handleSend = () => {
+    if (inputText.trim() === "") return;
 
+    const newMessage: Message = {
+      id: Date.now().toString(),
+      text: inputText,
+      isUser: true,
+      timestamp: new Date(),
+    };
+
+    setMessages((prev) => [...prev, newMessage]);
+    setInputText("");
+    detectLanguage(inputText);
+
+    // Focus back on input after sending
+    setTimeout(() => {
+      inputRef.current?.focus();
+    }, 0);
+  };
+
+  const detectLanguage = async (text: string) => {
     setIsLoading(true);
-    setResult([]);
 
     try {
-      await sleep(5);
-      const detectionResult = await detector.detect(inputText);
-      setResult(detectionResult.languages);
+      if (!detector) {
+        throw new Error("Language detector is not initialized");
+      }
+
+      const detectionResult = await detector.detect(text);
+
+      const botMessage: Message = {
+        id: Date.now().toString(),
+        text: text,
+        isUser: false,
+        timestamp: new Date(),
+        detectedLanguage:
+          detectionResult.languages?.[0]?.languageCode || "unknown",
+        languages: detectionResult.languages,
+      };
+
+      setMessages((prev) => [...prev, botMessage]);
     } catch (error) {
       console.error("Error detecting language:", error);
-      setResult([]);
+
+      const errorMessage: Message = {
+        id: Date.now().toString(),
+        text: "Sorry, I could not detect the language. Please try again.",
+        isUser: false,
+        timestamp: new Date(),
+      };
+
+      setMessages((prev) => [...prev, errorMessage]);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleTranslate = async () => {
-    if (!inputText || !result.length) {
-      alert("Please detect the language first");
-      return;
-    }
+  const translateMessage = async (messageId: string) => {
+    const messageToTranslate = messages.find((msg) => msg.id === messageId);
+    if (!messageToTranslate || !messageToTranslate.detectedLanguage) return;
 
     setIsTranslating(true);
-    setTranslatedText("");
-    const sourceLanguage = result[0].languageCode;
+    setDownloadProgress(null);
 
     try {
-      setIsDownloading(true);
+      const sourceLanguage = messageToTranslate.detectedLanguage;
+
       const translatorCapabilities = await window.ai.translator.capabilities();
       const status = await translatorCapabilities.languagePairAvailable(
         sourceLanguage,
-        targetLanguage
+        selectedLanguage
       );
-      console.log("op", status);
+
+      let translatedText = "";
 
       if (status === "after-download") {
-        console.log("here", sourceLanguage, targetLanguage);
-        const newTranslator = await window.ai.translator.create({
+        const translator = await window.ai.translator.create({
           sourceLanguage,
-          targetLanguage,
+          targetLanguage: selectedLanguage,
           monitor(m: any) {
             m.addEventListener("downloadprogress", (e: any) => {
-              console.log(`Downloaded ${e.loaded} of ${e.total} bytes`);
               setDownloadProgress({
                 loaded: e.loaded,
                 total: e.total,
@@ -185,68 +230,72 @@ const App = () => {
           },
         });
 
-        setTranslator(newTranslator);
-        const translated = await newTranslator.translate(inputText);
-        setTranslatedText(translated);
+        translatedText = await translator.translate(messageToTranslate.text);
       } else if (status === "unsupported") {
-        setTranslatedText(
-          `Translation from ${sourceLanguage} to ${targetLanguage} is not supported.`
-        );
+        translatedText = `Translation from ${sourceLanguage} to ${selectedLanguage} is not supported.`;
       } else {
         const translator = await window.ai.translator.create({
           sourceLanguage,
-          targetLanguage,
+          targetLanguage: selectedLanguage,
         });
 
-        const translatedText = await translator.translate(inputText);
-        setTranslatedText(translatedText);
+        translatedText = await translator.translate(messageToTranslate.text);
       }
+
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === messageId ? { ...msg, translation: translatedText } : msg
+        )
+      );
     } catch (error) {
-      console.error("Translation error:", error);
-      setTranslatedText("Error: Could not translate text");
+      console.error("Error translating text:", error);
+
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === messageId
+            ? { ...msg, translation: "Error: Could not translate text" }
+            : msg
+        )
+      );
     } finally {
       setIsTranslating(false);
-      setIsDownloading(false);
       setDownloadProgress(null);
     }
   };
 
-  const handleSummarize = async () => {
-    if (!inputText) {
-      alert("Please input text first");
-      return;
-    }
+  const summarizeMessage = async (messageId: string) => {
+    const messageToSummarize = messages.find((msg) => msg.id === messageId);
+    if (!messageToSummarize) return;
 
     setIsSummarizing(true);
-    setSummarizedText("");
-
-    const options = {
-      sharedContext: "This is a scientific article",
-      type: "key-points",
-      format: "markdown",
-      length: "medium",
-    };
+    setDownloadProgress(null);
 
     try {
-      setIsDownloading(true);
+      const options = {
+        sharedContext: "This is a chat message",
+        type: "key-points",
+        format: "markdown",
+        length: "medium",
+      };
+
       const summarizerCapabilities = await window.ai.summarizer.capabilities();
       const status = await summarizerCapabilities.available;
 
       let summarizer;
-      if (status === "no") {
-        setSummarizedText("The Summarizer API isn't usable");
-      } else if (status === "readily") {
-        console.log("sum", status);
+      let summary = "";
 
+      if (status === "no") {
+        summary = "The Summarizer API isn't available for this content.";
+      } else if (status === "readily") {
         summarizer = await window.ai.summarizer.create(options);
-        console.log(summarizer);
+        summary = await summarizer.summarize(messageToSummarize.text, {
+          context: "This is a chat message for summarization.",
+        });
       } else {
-        console.log('summarizer', status);
         summarizer = await window.ai.summarizer.create({
           ...options,
           monitor(m: any) {
             m.addEventListener("downloadprogress", (e: any) => {
-              console.log(`Downloaded ${e.loaded} of ${e.total} bytes`);
               setDownloadProgress({
                 loaded: e.loaded,
                 total: e.total,
@@ -254,185 +303,196 @@ const App = () => {
             });
           },
         });
-        console.log(summarizer);
+
+        summary = await summarizer.summarize(messageToSummarize.text, {
+          context: "This is a chat message for summarization.",
+        });
       }
 
-      const summary = await summarizer.summarize(inputText, {
-        context: "This article is intended for a tech-savvy audience.",
-      });
-
-      setSummarizedText(summary);
+      setMessages((prev) =>
+        prev.map((msg) => (msg.id === messageId ? { ...msg, summary } : msg))
+      );
     } catch (error) {
-      console.error("Summarization error:", error);
-      setSummarizedText("Error: Could not summarize text");
+      console.error("Error summarizing text:", error);
+
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === messageId
+            ? { ...msg, summary: "Error: Could not summarize text" }
+            : msg
+        )
+      );
     } finally {
       setIsSummarizing(false);
-      setIsDownloading(false);
       setDownloadProgress(null);
     }
   };
 
+  // Function to convert language code to human-readable name
+  const languageTagToHumanReadable = (
+    languageTag: string,
+    targetLanguage = "en"
+  ) => {
+    try {
+      const displayNames = new Intl.DisplayNames([targetLanguage], {
+        type: "language",
+      });
+      return displayNames.of(languageTag);
+    } catch (error) {
+      console.error("Error converting language tag:", error);
+      return languageTag;
+    }
+  };
+
   return (
-    <div className="max-w-2xl mx-auto p-6">
-      {/* ... rest of your JSX remains the same ... */}
-      <h1 className="text-2xl font-bold mb-4">
-        Language Detection and Translation
-      </h1>
+    <div className="flex flex-col h-screen bg-gray-100">
+      {/* Output area: Messages and actions */}
+      <div className="flex-grow overflow-auto p-4">
+        <div className="space-y-4">
+          {messages.map((message) => (
+            <div key={message.id} className="mb-4">
+              {/* Message content */}
+              <div
+                className={`p-3 rounded-lg ${
+                  message.isUser
+                    ? "bg-blue-100 ml-auto max-w-3/4"
+                    : "bg-white max-w-3/4"
+                }`}
+              >
+                <p>{message.text}</p>
 
-      <p className="mb-4">
-        This demo detects and translates text using{" "}
-        <a
-          href="https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes"
-          className="text-blue-600 hover:text-blue-800 underline"
-        >
-          ISO_639-1
-        </a>{" "}
-        language codes.
-      </p>
-
-      <h2 className="text-xl font-bold mb-2">How to use</h2>
-      <p className="mb-4">
-        Add text to the input field, then press <b>Detect Language</b> or{" "}
-        <b>Translate</b>.
-      </p>
-
-      <p className="mb-4">
-        You can{" "}
-        <button
-          onClick={handlePopulateText}
-          className="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50"
-        >
-          POPULATE TEXT
-        </button>{" "}
-        with a default input, or add your own text.
-      </p>
-
-      <p className="font-bold mb-2">Input:</p>
-      <div className="mb-4">
-        <textarea
-          value={inputText}
-          onChange={(e) => setInputText(e.target.value)}
-          className="w-full h-32 p-3 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          rows={8}
-          cols={40}
-          aria-label="Text Input"
-        />
-      </div>
-
-      <div className="flex gap-4 mb-6">
-        <button
-          onClick={handleDetectLanguage}
-          disabled={!detector || isLoading}
-          className="bg-blue-500 text-white px-6 py-2 rounded hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 disabled:bg-blue-300 disabled:cursor-not-allowed"
-        >
-          {isLoading ? "DETECTING..." : "DETECT LANGUAGE"}
-        </button>
-
-        <div className="flex items-center gap-2">
-          <select
-            value={targetLanguage}
-            onChange={(e) => setTargetLanguage(e.target.value)}
-            className="p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            {supportedLanguages.map((lang) => (
-              <option key={lang.code} value={lang.code}>
-                {lang.name}
-              </option>
-            ))}
-          </select>
-
-          <button
-            onClick={handleTranslate}
-            disabled={isTranslating || !result.length}
-            className="bg-green-500 text-white px-6 py-2 rounded hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 disabled:bg-green-300 disabled:cursor-not-allowed"
-          >
-            {isTranslating ? "TRANSLATING..." : "TRANSLATE"}
-          </button>
-
-          <button
-            onClick={handleSummarize}
-            disabled={isSummarizing}
-            className="bg-cyan-500 text-white px-6 py-2 rounded hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 disabled:bg-green-300 disabled:cursor-not-allowed"
-          >
-            {isSummarizing ? "SUMMARIZING..." : "SUMMARIZE"}
-          </button>
-        </div>
-      </div>
-
-      {isDownloading && downloadProgress && (
-        <div className="mb-4">
-          <div className="text-sm text-gray-600 mb-2">
-            Downloading language model:{" "}
-            {((downloadProgress.loaded / downloadProgress.total) * 100).toFixed(
-              1
-            )}
-            %
-          </div>
-          <div className="w-full bg-gray-200 rounded-full h-2.5">
-            <div
-              className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
-              style={{
-                width: `${
-                  (downloadProgress.loaded / downloadProgress.total) * 100
-                }%`,
-              }}
-            ></div>
-          </div>
-        </div>
-      )}
-
-      <div className="space-y-6">
-        {/* Detection Results */}
-        <div>
-          <p className="font-bold mb-2">Detection Result:</p>
-          <div className="min-h-6">
-            {isLoading && <p>Detecting language...</p>}
-            {!isLoading && result.length > 0 && (
-              <div className="space-y-2">
-                {result.map((language, index) => (
-                  <div key={index} className="bg-gray-100 p-3 rounded">
-                    <div className="font-medium">
-                      {languageTagToHumanReadable(language.languageCode)}
+                {/* Show detected languages if available */}
+                {!message.isUser &&
+                  message.languages &&
+                  message.languages.length > 0 && (
+                    <div className="mt-2 text-sm text-gray-600">
+                      Detected:{" "}
+                      {languageTagToHumanReadable(
+                        message.languages[0].languageCode
+                      )}
+                      ({(message.languages[0].probability * 100).toFixed(1)}%)
                     </div>
-                    <div className="text-sm text-gray-600">
-                      Confidence: {(language.probability * 100).toFixed(1)}%
-                      <span className="ml-2 text-gray-400">
-                        (Code: {language.languageCode})
-                      </span>
+                  )}
+              </div>
+
+              {/* Action buttons and results (only for bot/output messages) */}
+              {!message.isUser && (
+                <div className="mt-2">
+                  <div className="flex items-center mt-2 space-x-2">
+                    {message.text.length > 150 &&
+                      message.detectedLanguage === "en" && (
+                        <button
+                          onClick={() => summarizeMessage(message.id)}
+                          disabled={isSummarizing}
+                          className="bg-purple-500 text-white px-3 py-1 rounded hover:bg-purple-600 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-opacity-50 disabled:bg-purple-300 disabled:cursor-not-allowed"
+                          aria-label="Summarize message"
+                        >
+                          {isSummarizing ? "Summarizing..." : "Summarize"}
+                        </button>
+                      )}
+
+                    <div className="flex items-center">
+                      <select
+                        value={selectedLanguage}
+                        onChange={(e) => setSelectedLanguage(e.target.value)}
+                        className="mr-2 p-1 border border-gray-300 rounded"
+                        aria-label="Select target language"
+                      >
+                        {supportedLanguages.map((lang) => (
+                          <option key={lang.code} value={lang.code}>
+                            {lang.name}
+                          </option>
+                        ))}
+                      </select>
+
+                      <button
+                        onClick={() => translateMessage(message.id)}
+                        disabled={isTranslating}
+                        className="bg-green-500 text-white px-3 py-1 rounded hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-opacity-50 disabled:bg-green-300 disabled:cursor-not-allowed"
+                        aria-label="Translate message"
+                      >
+                        {isTranslating ? "Translating..." : "Translate"}
+                      </button>
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
-            {!isLoading && result.length === 0 && inputText && (
-              <p>Result is empty</p>
-            )}
-          </div>
-        </div>
 
-        {/* Translation Results */}
-        <div>
-          <p className="font-bold mb-2">Translation:</p>
-          <div className="min-h-6">
-            {isTranslating && <p>Translating...</p>}
-            {!isTranslating && translatedText && (
-              <div className="bg-gray-100 p-3 rounded">
-                <p>{translatedText}</p>
-              </div>
-            )}
-          </div>
-        </div>
+                  {/* Display download progress */}
+                  {downloadProgress && (
+                    <div className="mt-2">
+                      <div className="text-sm text-gray-600 mb-1">
+                        Downloading language model:{" "}
+                        {(
+                          (downloadProgress.loaded / downloadProgress.total) *
+                          100
+                        ).toFixed(1)}
+                        %
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div
+                          className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                          style={{
+                            width: `${
+                              (downloadProgress.loaded /
+                                downloadProgress.total) *
+                              100
+                            }%`,
+                          }}
+                        ></div>
+                      </div>
+                    </div>
+                  )}
 
-        <div>
-          <p className="font-bold mb-2">Summary:</p>
-          <div className="min-h-6">
-            {isSummarizing && <p>Summarizing...</p>}
-            {!isSummarizing && summarizedText && (
-              <div className="bg-gray-100 p-3 rounded">
-                <p>{summarizedText}</p>
-              </div>
-            )}
-          </div>
+                  {/* Display translation result */}
+                  {message.translation && (
+                    <div className="mt-2 p-2 bg-gray-100 rounded">
+                      {message.translation}
+                    </div>
+                  )}
+
+                  {/* Display summary result */}
+                  {message.summary && (
+                    <div className="mt-2 p-2 bg-gray-100 rounded">
+                      {message.summary}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+
+          {isLoading && (
+            <div className="flex items-center p-3 bg-gray-100 rounded-lg">
+              <FiRefreshCw className="animate-spin mr-2" />
+              Processing...
+            </div>
+          )}
+
+          <div ref={messagesEndRef} />
+        </div>
+      </div>
+
+      {/* Input area: Textarea and send button */}
+      <div className="p-4 border-t border-gray-200 bg-white">
+        <div className="flex items-center">
+          <textarea
+            ref={inputRef}
+            value={inputText}
+            onChange={handleInputChange}
+            onKeyDown={handleKeyDown}
+            placeholder="Type your message here..."
+            className="flex-grow resize-none p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            rows={3}
+            aria-label="Message input"
+          />
+
+          <button
+            onClick={handleSend}
+            disabled={!inputText.trim() || isLoading}
+            className="ml-3 bg-blue-500 text-white p-3 rounded-full hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-opacity-50 disabled:bg-blue-300 disabled:cursor-not-allowed"
+            aria-label="Send message"
+          >
+            <FiSend size={20} />
+          </button>
         </div>
       </div>
     </div>
