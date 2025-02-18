@@ -361,6 +361,8 @@ const App = () => {
         backgroundImage: "url('/wall.jpg')",
         backgroundSize: "cover",
         backgroundRepeat: "no-repeat",
+        backgroundColor: "rgba(255, 255, 255, 0.85)", // white with 85% opacity
+        backgroundBlendMode: "overlay",
       }}
     >
       {/* Sticky Header */}
